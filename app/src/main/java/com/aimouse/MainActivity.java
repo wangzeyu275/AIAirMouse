@@ -714,18 +714,19 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    // ===== 键盘快捷键模拟（通过HID发送按键组合） =====
+    // ===== 键盘快捷键模拟（通过 HID 键盘报告发送真实按键组合） =====
 
     /**
-     * 模拟键盘快捷键。
-     * 注意：此方法通过蓝牙HID发送键盘报告，需要额外的键盘HID描述符。
-     * 当前简化实现：通过Toast提示手势已触发。
-     * 完整实现需要注册额外的键盘HID设备。
+     * 通过蓝牙 HID 键盘发送真实的按键组合。
+     * 支持的快捷键: Alt+Tab, Ctrl+Z, F5, Escape, VolumeUp, VolumeDown, VolumeMute
      */
     private void performKeyboardShortcut(String shortcut) {
-        // TODO: 完整实现需要注册额外的HID键盘设备
-        // 当前仅显示手势已触发
-        showToast("手势触发: " + shortcut);
+        if (mouseHIDService != null && mouseHIDService.isConnected()) {
+            mouseHIDService.sendShortcut(shortcut);
+            showToast("已发送: " + shortcut);
+        } else {
+            showToast("手势触发: " + shortcut + " (蓝牙未连接)");
+        }
     }
 
     // ===== 辅助方法 =====
