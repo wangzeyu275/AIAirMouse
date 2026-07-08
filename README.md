@@ -54,6 +54,7 @@ AIAirMouse/
 │       │   ├── KalmanFilter.java           # 卡尔曼滤波器
 │       │   ├── GestureRecognitionEngine.java # 手势识别引擎
 │       │   └── AdaptiveSensitivity.java    # 自适应灵敏度
+│       │   └── ShizukuHelper.java           # Shizuku 权限辅助（手机端一键授权）
 │       └── res/
 │           ├── layout/activity_main.xml    # 主界面布局
 │           ├── values/strings.xml          # 字符串资源
@@ -115,20 +116,40 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## ADB 权限授权（关键步骤）
+## 权限授权（关键步骤）
 
 > **重要：** 蓝牙 HID 方案需要 `android.permission.BLUETOOTH_PRIVILEGED` 权限，该权限是 `signature` 级别，普通安装无法自动获得。
 
-### 安装后必须执行以下命令：
+### 推荐方式：Shizuku（手机端一键授权，无需电脑）
+
+**Shizuku** 是一个开源工具，让普通 App 可以调用系统级 API。通过 Shizuku 可以直接在手机上完成授权，**无需连接电脑、无需 Root**。
+
+#### 步骤一：安装 Shizuku
+
+1. 从 [Google Play](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api) 或 [官网](https://shizuku.rikka.app/download/) 下载 Shizuku App
+2. 安装到手机
+
+#### 步骤二：启动 Shizuku（Android 11+）
+
+1. 打开手机 **设置 → 开发者选项 → 无线调试**
+2. 开启 **无线调试**
+3. 打开 Shizuku App，点击 **配对**
+4. 在无线调试菜单中选择 **使用配对码配对设备**
+5. 输入 Shizuku 显示的配对码
+6. 配对成功后，返回 Shizuku 点击 **启动**
+
+#### 步骤三：授权本 App
+
+1. 打开 AI空中鼠标 App
+2. App 会自动检测到 Shizuku 并引导授权
+3. 在 Shizuku 弹窗中点击 **允许**
+4. 授权完成，即可正常使用蓝牙 HID 功能
+
+### 备选方式：手动 ADB 授权（需电脑）
 
 ```bash
 adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
 ```
-
-**执行条件：**
-- 手机已通过 USB 连接电脑
-- 手机已开启 USB 调试（设置 → 开发者选项 → USB 调试）
-- 电脑已安装 ADB 工具
 
 **验证授权是否成功：**
 ```bash
@@ -136,9 +157,8 @@ adb shell dumpsys package com.aimouse | grep BLUETOOTH_PRIVILEGED
 ```
 如果看到 `granted=true` 则表示授权成功。
 
-**如果没有执行此步骤：**
-- App 启动蓝牙 HID 注册时会抛出 `SecurityException`
-- App 会弹窗提示需要执行 ADB 授权命令
+**如果没有授权：**
+- App 会在启动时弹窗提示，引导使用 Shizuku 或手动 ADB 授权
 - 触控板和传感器功能仍可正常使用，但无法通过蓝牙控制电脑
 
 ---
@@ -392,7 +412,11 @@ gain = 1.2 / (1 + e^(-speed / 100))
 
 **错误信息：** `SecurityException: Permission denied: BLUETOOTH_PRIVILEGED`
 
-**解决方案：** 执行 ADB 授权命令：
+**解决方案（推荐）：** 使用 Shizuku 在手机端一键授权
+1. 安装并启动 Shizuku App（通过无线调试）
+2. 打开 AI空中鼠标，App 会自动引导授权流程
+
+**备选方案：** 手动执行 ADB 授权命令：
 ```bash
 adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
 ```

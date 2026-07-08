@@ -5,8 +5,9 @@
     <!-- Bluetooth HID permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <!-- BLUETOOTH_PRIVILEGED is signature-level; must be granted via ADB:
-         adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED -->
+    <!-- BLUETOOTH_PRIVILEGED is signature-level; must be granted via ADB or Shizuku:
+         adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
+         或通过 Shizuku App 在手机端直接授权 -->
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
@@ -61,6 +62,14 @@
                 <action android:name="android.bluetooth.hiddevice.HidDeviceService" />
             </intent-filter>
         </service>
+
+        <!-- Shizuku Provider — 用于与 Shizuku 服务通信 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 

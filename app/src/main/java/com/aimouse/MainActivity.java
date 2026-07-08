@@ -36,6 +36,8 @@ import androidx.core.content.ContextCompat;
 
 import java.util.Locale;
 
+import rikka.shizuku.Shizuku;
+
 /**
  * AI空中鼠标主界面。
  *
@@ -101,6 +103,12 @@ public class MainActivity extends AppCompatActivity
     // ===== 权限 =====
     private static final int REQUEST_BT_PERMISSIONS = 1001;
 
+    // ===== Shizuku =====
+    private Shizuku.OnRequestPermissionResultListener shizukuPermissionListener;
+    private Shizuku.OnBinderReceivedListener shizukuBinderReceivedListener;
+    private Shizuku.OnBinderDeadListener shizukuBinderDeadListener;
+    private boolean shizukuListenersRegistered = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -111,6 +119,7 @@ public class MainActivity extends AppCompatActivity
         initGestureEngine();
         loadPreferences();
         setupListeners();
+        initShizukuListeners();
         bindMouseHIDService();
         checkPermissions();
     }
@@ -262,6 +271,64 @@ public class MainActivity extends AppCompatActivity
 
     // ===== 权限检查 =====
 
+    /**
+     * 初始化 Shizuku 监听器。
+     * 当 Shizuku 服务启动/停止时自动处理权限授权流程。
+     */
+    private void initShizukuListeners() {
+        shizukuBinderReceivedListener = () -> {
+            Log.i(TAG, "Shizuku 服务已连接");
+            runOnUiThread(() -> {
+                // Shizuku 刚启动，检查是否需要授权
+                if (!ShizukuHelper.isPrivilegeGranted(this)) {
+                    ShizukuHelper.startGrantFlow(this, null);
+                }
+            });
+        };
+
+        shizukuBinderDeadListener = () -> {
+            Log.i(TAG, "Shizuku 服务已断开");
+        };
+
+        shizukuPermissionListener = (requestCode, grantResult) -> {
+            Log.i(TAG, "Shizuku 权限请求结果: " + grantResult);
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> {
+                    ShizukuHelper.grantPrivilegePermission(
+                            new ShizukuHelper.GrantCallback() {
+                                @Override
+                                public void onSuccess() {
+                                    runOnUiThread(() -> {
+                                        Toast.makeText(MainActivity.this,
+                                                "BLUETOOTH_PRIVILEGED 授权成功！",
+                                                Toast.LENGTH_LONG).show();
+                                    });
+                                }
+
+                                @Override
+                                public void onFailure(String reason) {
+                                    runOnUiThread(() -> {
+                                        Toast.makeText(MainActivity.this,
+                                                "授权失败: " + reason,
+                                                Toast.LENGTH_LONG).show();
+                                    });
+                                }
+
+                                @Override
+                                public void onShizukuNotAvailable() {
+                                    // 忽略
+                                }
+                            });
+                });
+            }
+        };
+
+        Shizuku.addBinderReceivedListener(shizukuBinderReceivedListener);
+        Shizuku.addBinderDeadListener(shizukuBinderDeadListener);
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener);
+        shizukuListenersRegistered = true;
+    }
+
     private void checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Android 12+ 需要 BLUETOOTH_CONNECT 权限
@@ -283,6 +350,16 @@ public class MainActivity extends AppCompatActivity
                         new String[]{Manifest.permission.POST_NOTIFICATIONS},
                         REQUEST_BT_PERMISSIONS + 1);
             }
+        }
+
+        // 检查 BLUETOOTH_PRIVILEGED 权限（signature级别，需通过 ADB 或 Shizuku 授权）
+        if (!ShizukuHelper.isPrivilegeGranted(this)) {
+            // 延迟检查，给 Shizuku 监听器注册留出时间
+            uiHandler.postDelayed(() -> {
+                if (!ShizukuHelper.isPrivilegeGranted(this)) {
+                    showPrivilegeRequiredDialog();
+                }
+            }, 500);
         }
     }
 
@@ -353,6 +430,12 @@ public class MainActivity extends AppCompatActivity
             return;
         }
 
+        // 检查 BLUETOOTH_PRIVILEGED 权限
+        if (!ShizukuHelper.isPrivilegeGranted(this)) {
+            showPrivilegeRequiredDialog();
+            return;
+        }
+
         // 确保蓝牙已开启
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null || !adapter.isEnabled()) {
@@ -370,6 +453,8 @@ public class MainActivity extends AppCompatActivity
             tvConnectionStatus.setText("等待电脑连接…");
             statusIndicator.setBackgroundResource(R.drawable.status_dot_connecting);
             btnConnect.setText("取消注册");
+        } else {
+            showToast("HID注册失败，请检查权限是否已授予");
         }
     }
 
@@ -406,6 +491,13 @@ public class MainActivity extends AppCompatActivity
         if (serviceBound) {
             unbindService(serviceConnection);
             serviceBound = false;
+        }
+        // 移除 Shizuku 监听器
+        if (shizukuListenersRegistered) {
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener);
+            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener);
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener);
+            shizukuListenersRegistered = false;
         }
         super.onDestroy();
     }
@@ -652,6 +744,35 @@ public class MainActivity extends AppCompatActivity
                 .setTitle("错误")
                 .setMessage(message)
                 .setPositiveButton("确定", null)
+                .show();
+    }
+
+    /**
+     * 显示 BLUETOOTH_PRIVILEGED 权限缺失对话框。
+     * 优先引导用户使用 Shizuku（手机端直接授权），备选手动 ADB。
+     */
+    private void showPrivilegeRequiredDialog() {
+        // 如果 Shizuku 可用，直接走 Shizuku 授权流程
+        if (ShizukuHelper.isShizukuAvailable()) {
+            ShizukuHelper.startGrantFlow(this, null);
+            return;
+        }
+
+        // Shizuku 不可用，显示对话框让用户选择
+        new AlertDialog.Builder(this)
+                .setTitle("需要高级权限")
+                .setMessage("蓝牙 HID 功能需要 BLUETOOTH_PRIVILEGED 权限。\n\n"
+                        + "推荐方式一：使用 Shizuku（无需电脑）\n"
+                        + "  1. 安装 Shizuku App\n"
+                        + "  2. 通过无线调试启动 Shizuku\n"
+                        + "  3. 回到本 App 自动完成授权\n\n"
+                        + "备选方式二：手动 ADB 授权（需电脑）\n"
+                        + "  adb shell pm grant com.aimouse \\\n"
+                        + "    android.permission.BLUETOOTH_PRIVILEGED")
+                .setPositiveButton("使用 Shizuku", (d, w) -> {
+                    ShizukuHelper.startGrantFlow(this, null);
+                })
+                .setNegativeButton("稍后", null)
                 .show();
     }
 }

@@ -31,5 +31,9 @@ android {
 }
 
 dependencies {
-    // Zero third-party dependencies — pure Android SDK only
+    // Shizuku — 无需 Root，通过无线调试获取 ADB 级权限
+    // 用于在手机端直接授权 BLUETOOTH_PRIVILEGED，无需连接电脑
+    def shizukuVersion = "13.1.5"
+    implementation "dev.rikka.shizuku:api:$shizukuVersion"
+    implementation "dev.rikka.shizuku:provider:$shizukuVersion"
 }
