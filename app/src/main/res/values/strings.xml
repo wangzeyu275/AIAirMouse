@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI空中鼠标</string>
+    <string name="connection_status">连接状态</string>
+    <string name="disconnected">未连接</string>
+    <string name="connected">已连接</string>
+    <string name="connecting">连接中…</string>
+    <string name="connect_bt">连接蓝牙</string>
+    <string name="disconnect_bt">断开蓝牙</string>
+    <string name="pointer_switch">指针移动</string>
+    <string name="pointer_on">指针移动：开</string>
+    <string name="pointer_off">指针移动：关</string>
+    <string name="gyro_data">陀螺仪数据</string>
+    <string name="accel_data">加速度计数据</string>
+    <string name="sensor_x">X: %.2f</string>
+    <string name="sensor_y">Y: %.2f</string>
+    <string name="sensor_z">Z: %.2f</string>
+    <string name="filtered">(滤波后) X: %.2f  Y: %.2f</string>
+    <string name="sensitivity_label">灵敏度</string>
+    <string name="gesture_detected">手势: %s</string>
+    <string name="no_gesture">无手势</string>
+    <string name="notification_channel_name">AI空中鼠标服务</string>
+    <string name="notification_channel_desc">蓝牙HID鼠标连接服务</string>
+    <string name="notification_title">AI空中鼠标运行中</string>
+    <string name="notification_text">蓝牙HID鼠标已连接</string>
+    <string name="gyro_unavailable">陀螺仪不可用，使用加速度计降级模式</string>
+    <string name="bt_privilege_required">需要BLUETOOTH_PRIVILEGED权限\n请通过ADB执行:\nadb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED</string>
+    <string name="bt_not_supported">此设备不支持蓝牙HID</string>
+    <string name="touchpad_hint">虚拟触控板区域</string>
+</resources>

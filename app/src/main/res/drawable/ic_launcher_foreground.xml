@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mouse cursor shape -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,30 L40,75 L48,68 L58,80 L65,77 L55,64 L65,62 Z" />
+    <!-- Air wave lines -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M68,40 Q78,38 78,48" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M70,34 Q84,30 86,46" />
+</vector>
