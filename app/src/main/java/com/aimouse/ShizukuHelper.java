@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 
 import rikka.shizuku.Shizuku;
 
@@ -121,8 +122,11 @@ public class ShizukuHelper {
 
         new Thread(() -> {
             try {
-                // Shizuku.newProcess 返回一个 Process，可在其中执行 shell 命令
-                Process process = Shizuku.newProcess(
+                // Shizuku.newProcess 在 13.x 中为私有方法，需通过反射调用
+                Method newProcess = Shizuku.class.getDeclaredMethod(
+                        "newProcess", String[].class, String[].class, String.class);
+                newProcess.setAccessible(true);
+                Process process = (Process) newProcess.invoke(null,
                         new String[]{"/system/bin/sh", "-c", command},
                         null, null);
 

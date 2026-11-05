@@ -92,7 +92,7 @@ public class MouseHIDService extends Service {
             0x25, 0x7F,        //     Logical Maximum (127)
             0x75, 0x08,        //     Report Size (8)
             (byte) 0x95, 0x03, //     Report Count (3)
-            (byte) 0x81, 0x06, //     Input (Data,Var,Rel) — X, Y, Wheel
+            0x81, 0x06, //     Input (Data,Var,Rel) — X, Y, Wheel
             (byte) 0xC0,       //   End Collection
             // --- AC Pan (水平滚轮) ---
             0x05, 0x0C,        //   Usage Page (Consumer)
@@ -101,7 +101,7 @@ public class MouseHIDService extends Service {
             0x25, 0x7F,        //   Logical Maximum (127)
             0x75, 0x08,        //   Report Size (8)
             (byte) 0x95, 0x01, //   Report Count (1)
-            (byte) 0x81, 0x06, //   Input (Data,Var,Rel)
+            0x81, 0x06, //   Input (Data,Var,Rel)
             (byte) 0xC0,       // End Collection (Mouse)
 
             // ===== Report ID 0x02: Keyboard =====
@@ -117,11 +117,11 @@ public class MouseHIDService extends Service {
             0x25, 0x01,        //   Logical Maximum (1)
             0x75, 0x01,        //   Report Size (1)
             (byte) 0x95, 0x08, //   Report Count (8)
-            (byte) 0x81, 0x02, //   Input (Data,Var,Abs) — 8 modifier bits
+            0x81, 0x02, //   Input (Data,Var,Abs) — 8 modifier bits
             // --- 保留字节 ---
             (byte) 0x95, 0x01, //   Report Count (1)
             0x75, 0x08,        //   Report Size (8)
-            (byte) 0x81, 0x03, //   Input (Cnst,Var,Abs) — Reserved
+            0x81, 0x03, //   Input (Cnst,Var,Abs) — Reserved
             // --- 6 键位 ---
             (byte) 0x95, 0x06, //   Report Count (6)
             0x75, 0x08,        //   Report Size (8)
@@ -131,7 +131,7 @@ public class MouseHIDService extends Service {
             0x19, 0x00,        //   Usage Minimum (0)
             0x2A, (byte) 0xFF, 0x00, // Usage Maximum (255)
             (byte) 0x81, 0x00, //   Input (Data,Array)
-            0xC0,              // End Collection (Keyboard)
+            (byte) 0xC0,       // End Collection (Keyboard)
 
             // ===== Report ID 0x03: Consumer Control =====
             0x05, 0x0C,        // Usage Page (Consumer)
@@ -144,8 +144,8 @@ public class MouseHIDService extends Service {
             0x2A, (byte) 0xFF, 0x03, // Usage Maximum (1023)
             0x75, 0x10,        //   Report Size (16)
             (byte) 0x95, 0x01, //   Report Count (1)
-            (byte) 0x81, 0x00, //   Input (Data,Array,Abs)
-            0xC0               // End Collection (Consumer)
+            0x81, 0x00, //   Input (Data,Array,Abs)
+            0xC0        // End Collection (Consumer)
     };
 
     // ===== USB HID 键位码常量 =====
@@ -417,7 +417,8 @@ public class MouseHIDService extends Service {
             BluetoothHidDeviceAppQosSettings qosSettings =
                     new BluetoothHidDeviceAppQosSettings(
                             BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
-                            800, 0, 0, BluetoothHidDeviceAppQosSettings.MAX);
+                            800, 0, 0, BluetoothHidDeviceAppQosSettings.MAX,
+                            BluetoothHidDeviceAppQosSettings.MAX);
             boolean result = hidDevice.registerApp(
                     sdpSettings, null, qosSettings,
                     Runnable::run, hidDeviceCallback);
