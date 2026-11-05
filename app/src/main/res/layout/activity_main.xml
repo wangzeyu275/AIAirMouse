@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   顶部固定：标题 / 连接状态 / 指针开关
-  中部滚动：传感器实时数据 + 灵敏度 + 高级选项
+  中部滚动：传感器实时数据 + 高级选项
   底部固定：占满剩余高度的触控板 + 贴合底边的弧形左右键
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -16,14 +16,31 @@
     android:paddingBottom="12dp">
 
     <!-- ================= Header ================= -->
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:letterSpacing="0.06"
-        android:text="AI 空中鼠标"
-        android:textColor="@color/textPrimary"
-        android:textSize="25sp"
-        android:textStyle="bold" />
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:letterSpacing="0.06"
+            android:text="AI 空中鼠标"
+            android:textColor="@color/textPrimary"
+            android:textSize="25sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnSettings"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/settings_title"
+            android:src="@drawable/ic_settings" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -171,12 +188,11 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- ================= 中部滚动区：传感器 + 灵敏度 ================= -->
+    <!-- ================= 中部滚动区：传感器 ================= -->
     <ScrollView
         android:id="@+id/middleScroll"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:fillViewport="false"
         android:overScrollMode="never"
         android:scrollbars="none">
@@ -188,6 +204,7 @@
 
             <!-- Sensor Fusion Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/sensorCard"
                 style="@style/Widget.AIAirMouse.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -228,7 +245,8 @@
                         android:id="@+id/sensorWaveView"
                         android:layout_width="match_parent"
                         android:layout_height="88dp"
-                        android:layout_marginTop="10dp" />
+                        android:layout_marginTop="10dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tvGyroRaw"
@@ -272,57 +290,6 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Sensitivity Card -->
-            <com.google.android.material.card.MaterialCardView
-                style="@style/Widget.AIAirMouse.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:letterSpacing="0.1"
-                            android:text="@string/sensitivity_label"
-                            android:textColor="@color/textSecondary"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/tvSensitivityValue"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:gravity="end"
-                            android:text="1.0x"
-                            android:textColor="@color/neonCyan"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <SeekBar
-                        android:id="@+id/seekBarSensitivity"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:max="200"
-                        android:progress="100"
-                        android:progressTint="@color/neonCyan"
-                        android:thumbTint="@color/neonCyan" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Advanced Options -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnAdvanced"
@@ -349,7 +316,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="8dp"
-        android:layout_weight="1.6">
+        android:layout_weight="1">
 
         <FrameLayout
             android:layout_width="match_parent"
