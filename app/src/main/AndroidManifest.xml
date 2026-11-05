@@ -5,12 +5,15 @@
     <!-- Bluetooth HID permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <!-- BLUETOOTH_PRIVILEGED is signature-level; must be granted via ADB or Shizuku:
-         adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
-         或通过 Shizuku App 在手机端直接授权 -->
+    <!-- 可选：BLUETOOTH_PRIVILEGED 为 signature 级权限。Bluke 的实践表明常规 HID
+         注册只需要运行时蓝牙权限，因此本 App 不再把它作为前置条件，
+         声明保留仅为兼容个别需要系统级权限的 ROM。 -->
     <uses-permission android:name="android.permission.BLUETOOTH_PRIVILEGED" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 
     <!-- Foreground service permission -->

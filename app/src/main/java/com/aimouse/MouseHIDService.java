@@ -25,14 +25,16 @@ import android.util.Log;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * 蓝牙 HID 复合设备服务 — 手机同时模拟蓝牙鼠标 + 键盘。
  *
  * 使用 Android 官方 BluetoothHidDevice API，通过复合 HID 报告描述符
- * 在单个 HID 设备中注册鼠标和键盘两个子设备，通过 Report ID 区分：
+ * 在单个 HID 设备中注册鼠标、键盘和 Consumer 三个子设备，通过 Report ID 区分：
  *   - Report ID 0x01: 鼠标（5 按钮 + X/Y 位移 + 垂直/水平滚轮）
  *   - Report ID 0x02: 标准键盘（8 修饰键 + 6 键位同时按下）
+ *   - Report ID 0x03: Consumer 控制（16-bit usage，音量/媒体键等）
  */
 public class MouseHIDService extends Service {
 
@@ -43,6 +45,7 @@ public class MouseHIDService extends Service {
     // ===== Report ID 常量 =====
     private static final byte REPORT_ID_MOUSE = 0x01;
     private static final byte REPORT_ID_KEYBOARD = 0x02;
+    private static final byte REPORT_ID_CONSUMER = 0x03;
 
     // ===== 复合 HID 报告描述符（鼠标 + 键盘） =====
     //
@@ -128,7 +131,21 @@ public class MouseHIDService extends Service {
             0x19, 0x00,        //   Usage Minimum (0)
             0x2A, (byte) 0xFF, 0x00, // Usage Maximum (255)
             (byte) 0x81, 0x00, //   Input (Data,Array)
-            (byte) 0xC0         // End Collection (Keyboard)
+            0xC0,              // End Collection (Keyboard)
+
+            // ===== Report ID 0x03: Consumer Control =====
+            0x05, 0x0C,        // Usage Page (Consumer)
+            0x09, 0x01,        // Usage (Consumer Control)
+            (byte) 0xA1, 0x01, // Collection (Application)
+            (byte) 0x85, 0x03, //   Report ID (3)
+            0x15, 0x00,        //   Logical Minimum (0)
+            0x26, (byte) 0xFF, 0x03, // Logical Maximum (1023)
+            0x19, 0x00,        //   Usage Minimum (0)
+            0x2A, (byte) 0xFF, 0x03, // Usage Maximum (1023)
+            0x75, 0x10,        //   Report Size (16)
+            (byte) 0x95, 0x01, //   Report Count (1)
+            (byte) 0x81, 0x00, //   Input (Data,Array,Abs)
+            0xC0               // End Collection (Consumer)
     };
 
     // ===== USB HID 键位码常量 =====
@@ -207,9 +224,10 @@ public class MouseHIDService extends Service {
     public static final byte KEY_LEFT = 0x50;
     public static final byte KEY_DOWN = 0x51;
     public static final byte KEY_UP = 0x52;
-    public static final byte KEY_VOLUME_UP = (byte) 0x80;   // Consumer page
-    public static final byte KEY_VOLUME_DOWN = (byte) 0x81; // Consumer page
-    public static final byte KEY_VOLUME_MUTE = (byte) 0x7F; // Consumer page
+    // Consumer Page (0x0C) 用法码
+    public static final int CONSUMER_VOLUME_UP = 0x00E9;
+    public static final int CONSUMER_VOLUME_DOWN = 0x00EA;
+    public static final int CONSUMER_VOLUME_MUTE = 0x00E2;
 
     // 修饰键位掩码
     public static final byte MOD_LEFT_CTRL   = 0x01;
@@ -226,7 +244,9 @@ public class MouseHIDService extends Service {
     private BluetoothHidDevice hidDevice;
     private BluetoothDevice connectedDevice;
     private boolean isRegistered = false;
+    private boolean isRegistering = false;
     private boolean isConnected = false;
+    private boolean receiverRegistered = false;
 
     // ===== 后台线程 =====
     private HandlerThread handlerThread;
@@ -236,6 +256,7 @@ public class MouseHIDService extends Service {
     // ===== 当前 HID 报告状态 =====
     private final byte[] mouseReport = new byte[6];    // 6 字节鼠标报告 (含 Report ID)
     private final byte[] keyboardReport = new byte[9]; // 9 字节键盘报告 (含 Report ID)
+    private final byte[] consumerReport = {REPORT_ID_CONSUMER, 0, 0}; // Consumer 报告
     private final Object reportLock = new Object();
 
     // ===== 连接状态回调 =====
@@ -284,6 +305,7 @@ public class MouseHIDService extends Service {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         registerReceiver(bluetoothStateReceiver, filter);
+        receiverRegistered = true;
     }
 
     @Override
@@ -299,7 +321,10 @@ public class MouseHIDService extends Service {
     @Override
     public void onDestroy() {
         unregisterHID();
-        unregisterReceiver(bluetoothStateReceiver);
+        if (receiverRegistered) {
+            unregisterReceiver(bluetoothStateReceiver);
+            receiverRegistered = false;
+        }
         reportExecutor.shutdown();
         if (handlerThread != null) {
             handlerThread.quitSafely();
@@ -318,42 +343,46 @@ public class MouseHIDService extends Service {
             Log.e(TAG, "蓝牙不可用");
             return false;
         }
+        // 已注册或正在注册时直接返回，避免重复 registerApp
+        if (isRegistered || isRegistering) {
+            return true;
+        }
+        // 已有 profile 代理时直接注册，无需重复获取代理
+        if (hidDevice != null) {
+            isRegistering = true;
+            boolean result = registerAppInternal();
+            isRegistering = false;
+            return result;
+        }
         try {
+            isRegistering = true;
             bluetoothAdapter.getProfileProxy(this, new BluetoothProfile.ServiceListener() {
                 @Override
                 public void onServiceConnected(int profile, BluetoothProfile proxy) {
-                    hidDevice = (BluetoothHidDevice) proxy;
-                    BluetoothHidDeviceAppSdpSettings sdpSettings =
-                            new BluetoothHidDeviceAppSdpSettings(
-                                    "AI Air Mouse", "AI空中鼠标 (鼠标+键盘)",
-                                    "Android", BluetoothHidDevice.SUBCLASS1_COMBO,
-                                    HID_REPORT_DESCRIPTOR);
-                    BluetoothHidDeviceAppQosSettings qosSettings =
-                            new BluetoothHidDeviceAppQosSettings(
-                                    BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
-                                    800, 0, 0, BluetoothHidDeviceAppQosSettings.MAX);
-                    boolean result = hidDevice.registerApp(
-                            sdpSettings, null, qosSettings,
-                            Runnable::run, hidDeviceCallback);
-                    if (result) {
-                        isRegistered = true;
-                        Log.i(TAG, "HID 复合设备注册成功 (鼠标+键盘)");
-                        updateNotification("等待蓝牙配对…");
-                    } else {
-                        Log.e(TAG, "HID 设备注册失败");
-                        if (connectionCallback != null) {
-                            connectionCallback.onError("HID 设备注册失败");
+                    if (!isRegistering) {
+                        // 获取代理期间已被取消注册，直接释放代理
+                        try {
+                            bluetoothAdapter.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy);
+                        } catch (Exception e) {
+                            Log.w(TAG, "释放 HID profile 代理异常: " + e.getMessage());
                         }
+                        return;
                     }
+                    hidDevice = (BluetoothHidDevice) proxy;
+                    isRegistering = false;
+                    registerAppInternal();
                 }
+
                 @Override
                 public void onServiceDisconnected(int profile) {
                     hidDevice = null;
                     isRegistered = false;
+                    isRegistering = false;
                 }
             }, BluetoothProfile.HID_DEVICE);
             return true;
         } catch (SecurityException e) {
+            isRegistering = false;
             Log.e(TAG, "缺少 BLUETOOTH_PRIVILEGED 权限: " + e.getMessage());
             if (connectionCallback != null) {
                 connectionCallback.onError(
@@ -361,6 +390,59 @@ public class MouseHIDService extends Service {
             }
             return false;
         } catch (Exception e) {
+            isRegistering = false;
+            Log.e(TAG, "HID 注册异常: " + e.getMessage(), e);
+            if (connectionCallback != null) {
+                connectionCallback.onError("HID 注册异常: " + e.getMessage());
+            }
+            return false;
+        }
+    }
+
+    /**
+     * 在已获取的 HID profile 代理上注册 HID App。
+     * 该方法运行在 BluetoothProfile 回调线程，必须在此捕获权限异常，
+     * 否则未捕获的 SecurityException 会导致进程崩溃。
+     */
+    private boolean registerAppInternal() {
+        if (hidDevice == null) {
+            return false;
+        }
+        try {
+            BluetoothHidDeviceAppSdpSettings sdpSettings =
+                    new BluetoothHidDeviceAppSdpSettings(
+                            "AI Air Mouse", "AI空中鼠标 (鼠标+键盘)",
+                            "Android", BluetoothHidDevice.SUBCLASS1_COMBO,
+                            HID_REPORT_DESCRIPTOR);
+            BluetoothHidDeviceAppQosSettings qosSettings =
+                    new BluetoothHidDeviceAppQosSettings(
+                            BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
+                            800, 0, 0, BluetoothHidDeviceAppQosSettings.MAX);
+            boolean result = hidDevice.registerApp(
+                    sdpSettings, null, qosSettings,
+                    Runnable::run, hidDeviceCallback);
+            if (result) {
+                isRegistered = true;
+                Log.i(TAG, "HID 复合设备注册成功 (鼠标+键盘)");
+                updateNotification("等待蓝牙配对…");
+            } else {
+                isRegistered = false;
+                Log.e(TAG, "HID 设备注册失败");
+                if (connectionCallback != null) {
+                    connectionCallback.onError("HID 设备注册失败");
+                }
+            }
+            return result;
+        } catch (SecurityException e) {
+            isRegistered = false;
+            Log.e(TAG, "缺少 BLUETOOTH_PRIVILEGED 权限: " + e.getMessage());
+            if (connectionCallback != null) {
+                connectionCallback.onError(
+                        "缺少 BLUETOOTH_PRIVILEGED 权限\n请通过 Shizuku 或 ADB 授权");
+            }
+            return false;
+        } catch (Exception e) {
+            isRegistered = false;
             Log.e(TAG, "HID 注册异常: " + e.getMessage(), e);
             if (connectionCallback != null) {
                 connectionCallback.onError("HID 注册异常: " + e.getMessage());
@@ -376,13 +458,27 @@ public class MouseHIDService extends Service {
                     hidDevice.disconnect(connectedDevice);
                 }
                 hidDevice.unregisterApp();
-                isRegistered = false;
-                isConnected = false;
-                connectedDevice = null;
             }
         } catch (Exception e) {
             Log.e(TAG, "注销 HID 异常: " + e.getMessage(), e);
+        } finally {
+            isRegistered = false;
+            isRegistering = false;
+            isConnected = false;
+            connectedDevice = null;
         }
+
+        // 释放 profile 代理，下次注册时重新获取
+        BluetoothHidDevice proxy = hidDevice;
+        hidDevice = null;
+        if (bluetoothAdapter != null && proxy != null) {
+            try {
+                bluetoothAdapter.closeProfileProxy(BluetoothProfile.HID_DEVICE, proxy);
+            } catch (Exception e) {
+                Log.w(TAG, "释放 HID profile 代理异常: " + e.getMessage());
+            }
+        }
+        updateNotification("等待连接…");
     }
 
     public void disconnect() {
@@ -560,18 +656,37 @@ public class MouseHIDService extends Service {
                 pressAndReleaseKey(KEY_ESCAPE);
                 break;
             case "VolumeUp":
-                pressAndReleaseKey(KEY_VOLUME_UP);
+                sendConsumerControl(CONSUMER_VOLUME_UP);
                 break;
             case "VolumeDown":
-                pressAndReleaseKey(KEY_VOLUME_DOWN);
+                sendConsumerControl(CONSUMER_VOLUME_DOWN);
                 break;
             case "VolumeMute":
-                pressAndReleaseKey(KEY_VOLUME_MUTE);
+                sendConsumerControl(CONSUMER_VOLUME_MUTE);
                 break;
             default:
                 Log.w(TAG, "未知快捷键: " + shortcut);
                 break;
         }
+    }
+
+    /**
+     * 发送 Consumer Page 控制键（音量、媒体键等）。
+     * Consumer 报告使用 16-bit usage，按下后延时发送释放报告。
+     */
+    public void sendConsumerControl(int usage) {
+        synchronized (reportLock) {
+            consumerReport[1] = (byte) (usage & 0xFF);
+            consumerReport[2] = (byte) ((usage >> 8) & 0xFF);
+        }
+        sendReport(consumerReport);
+        backgroundHandler.postDelayed(() -> {
+            synchronized (reportLock) {
+                consumerReport[1] = 0;
+                consumerReport[2] = 0;
+            }
+            sendReport(consumerReport);
+        }, 80);
     }
 
     // ===== 私有方法 =====
@@ -595,22 +710,35 @@ public class MouseHIDService extends Service {
     }
 
     private void sendReport(byte[] report) {
+        byte[] data;
+        synchronized (reportLock) {
+            data = report.clone();
+            if (report == mouseReport) {
+                // X/Y 是相对位移，每次发送后立即归零，
+                // 否则后续点击/滚轮报告会重复应用上一帧的位移，导致指针跳动
+                mouseReport[2] = 0;
+                mouseReport[3] = 0;
+            }
+        }
         if (!isConnected || hidDevice == null || connectedDevice == null) {
             return;
         }
-        reportExecutor.execute(() -> {
-            try {
-                byte[] data;
-                synchronized (reportLock) {
-                    data = report.clone();
+        final BluetoothDevice device = connectedDevice;
+        // 报告数组第 0 字节是 Report ID，需从 payload 中剥离，
+        // 作为 sendReport 的 reportId 参数单独传入
+        final int reportId = data[0] & 0xFF;
+        final byte[] payload = Arrays.copyOfRange(data, 1, data.length);
+        try {
+            reportExecutor.execute(() -> {
+                try {
+                    hidDevice.sendReport(device, reportId, payload);
+                } catch (Exception e) {
+                    Log.e(TAG, "发送 HID 报告失败: " + e.getMessage());
                 }
-                // sendReport(device, reportType, data)
-                // reportType: 0=INPUT, 1=OUTPUT, 2=FEATURE
-                hidDevice.sendReport(connectedDevice, 0, data);
-            } catch (Exception e) {
-                Log.e(TAG, "发送 HID 报告失败: " + e.getMessage());
-            }
-        });
+            });
+        } catch (RejectedExecutionException ignored) {
+            // 服务销毁时执行器可能已关闭
+        }
     }
 
     private static int clampToByte(int value) {
@@ -659,6 +787,16 @@ public class MouseHIDService extends Service {
 
     // ===== BluetoothHidDevice 回调 =====
 
+    private String getSafeDeviceName(BluetoothDevice device) {
+        try {
+            String name = device.getName();
+            return name != null ? name : "未知设备";
+        } catch (SecurityException e) {
+            // 蓝牙权限可能被撤销，读取设备名会抛 SecurityException
+            return "未知设备";
+        }
+    }
+
     private final BluetoothHidDevice.Callback hidDeviceCallback = new BluetoothHidDevice.Callback() {
         @Override
         public void onAppStatusChanged(BluetoothDevice device, boolean registered) {
@@ -670,7 +808,7 @@ public class MouseHIDService extends Service {
             if (state == BluetoothProfile.STATE_CONNECTED) {
                 isConnected = true;
                 connectedDevice = device;
-                updateNotification("已连接到 " + device.getName());
+                updateNotification("已连接到 " + getSafeDeviceName(device));
                 if (connectionCallback != null)
                     connectionCallback.onConnectionStateChanged(true, device);
             } else if (state == BluetoothProfile.STATE_DISCONNECTED) {

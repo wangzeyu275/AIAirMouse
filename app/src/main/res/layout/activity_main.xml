@@ -1,209 +1,423 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  顶部固定：标题 / 连接状态 / 指针开关
+  中部滚动：传感器实时数据 + 灵敏度 + 高级选项
+  底部固定：占满剩余高度的触控板 + 贴合底边的弧形左右键
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/background">
+    android:background="@color/background"
+    android:orientation="vertical"
+    android:paddingStart="14dp"
+    android:paddingTop="18dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="12dp">
+
+    <!-- ================= Header ================= -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.06"
+        android:text="AI 空中鼠标"
+        android:textColor="@color/textPrimary"
+        android:textSize="25sp"
+        android:textStyle="bold" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:gravity="center_horizontal">
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="12dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <!-- Title -->
+        <View
+            android:layout_width="26dp"
+            android:layout_height="2dp"
+            android:background="@color/neonCyan" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="AI空中鼠标"
-            android:textColor="@color/textPrimary"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginStart="8dp"
+            android:letterSpacing="0.22"
+            android:text="GYRO AIR MOUSE · BLUETOOTH HID"
+            android:textColor="@color/textSecondary"
+            android:textSize="9sp" />
+    </LinearLayout>
 
-        <!-- Connection Status Row -->
+    <!-- ================= Connection Card ================= -->
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.AIAirMouse.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:baselineAligned="false"
             android:gravity="center_vertical"
-            android:padding="8dp"
-            android:background="@color/surface"
-            android:layout_marginBottom="8dp">
+            android:orientation="horizontal"
+            android:padding="14dp">
 
             <View
                 android:id="@+id/statusIndicator"
                 android:layout_width="12dp"
                 android:layout_height="12dp"
-                android:background="@drawable/status_dot_disconnected"
-                android:layout_marginEnd="8dp" />
-
-            <TextView
-                android:id="@+id/tvConnectionStatus"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/disconnected"
-                android:textColor="@color/textPrimary"
-                android:textSize="14sp" />
-
-            <Button
-                android:id="@+id/btnConnect"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="@string/connect_bt"
-                android:textSize="12sp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:backgroundTint="@color/primary" />
-        </LinearLayout>
-
-        <!-- Pointer Movement Switch -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="8dp"
-            android:background="@color/surface"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/pointer_switch"
-                android:textColor="@color/textPrimary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <android.widget.Switch
-                android:id="@+id/switchPointer"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:thumbTint="@color/primary"
-                android:trackTint="@color/switchTrackOff" />
-        </LinearLayout>
-
-        <!-- Virtual Touchpad Area -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:minHeight="280dp"
-            android:layout_marginBottom="8dp">
-
-            <com.aimouse.TouchpadView
-                android:id="@+id/touchpadView"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_gravity="center" />
-        </FrameLayout>
-
-        <!-- Sensor Data Preview -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="8dp"
-            android:background="@color/surface"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/gyro_data"
-                android:textColor="@color/textSecondary"
-                android:textSize="12sp"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:id="@+id/tvGyroRaw"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/textPrimary"
-                android:textSize="12sp"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/tvGyroFiltered"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/accent"
-                android:textSize="12sp"
-                android:fontFamily="monospace"
-                android:layout_marginTop="4dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/accel_data"
-                android:textColor="@color/textSecondary"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:id="@+id/tvAccelRaw"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/textPrimary"
-                android:textSize="12sp"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/tvGesture"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/accent"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-        <!-- Sensitivity Slider -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="8dp"
-            android:background="@color/surface"
-            android:layout_marginBottom="8dp">
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/status_dot_disconnected" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/sensitivity_label"
+                    android:letterSpacing="0.18"
+                    android:text="CONNECTION"
                     android:textColor="@color/textSecondary"
-                    android:textSize="12sp" />
+                    android:textSize="9sp" />
 
                 <TextView
-                    android:id="@+id/tvSensitivityValue"
-                    android:layout_width="0dp"
+                    android:id="@+id/tvConnectionStatus"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="1.0x"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/disconnected"
                     android:textColor="@color/textPrimary"
-                    android:textSize="12sp"
-                    android:gravity="end" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
-            <SeekBar
-                android:id="@+id/seekBarSensitivity"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConnect"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:minHeight="40dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="@string/connect_bt"
+                android:textSize="12sp"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- ================= Pointer Switch Card ================= -->
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.AIAirMouse.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="12dp">
+
+            <View
+                android:id="@+id/pointerIndicator"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/pointer_indicator_off" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pointer_switch"
+                    android:textColor="@color/textPrimary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvPointerState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="OFF · 指针移动已暂停"
+                    android:textColor="@color/textSecondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchPointer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:thumbTint="@color/pointer_thumb_tint"
+                app:trackTint="@color/pointer_track_tint" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- ================= 中部滚动区：传感器 + 灵敏度 ================= -->
+    <ScrollView
+        android:id="@+id/middleScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="false"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Sensor Fusion Card -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.AIAirMouse.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:max="200"
-                android:progress="100"
-                android:thumbTint="@color/primary" />
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:letterSpacing="0.2"
+                            android:text="SENSOR FUSION"
+                            android:textColor="@color/neonCyan"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.15"
+                            android:text="LIVE"
+                            android:textColor="@color/statusConnected"
+                            android:textSize="9sp" />
+                    </LinearLayout>
+
+                    <com.aimouse.SensorWaveView
+                        android:id="@+id/sensorWaveView"
+                        android:layout_width="match_parent"
+                        android:layout_height="88dp"
+                        android:layout_marginTop="10dp" />
+
+                    <TextView
+                        android:id="@+id/tvGyroRaw"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:fontFamily="monospace"
+                        android:text="陀螺仪: 等待数据…"
+                        android:textColor="@color/textPrimary"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvGyroFiltered"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="monospace"
+                        android:text="滤波后: --"
+                        android:textColor="@color/neonCyan"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvAccelRaw"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="monospace"
+                        android:text="加速度计: 等待数据…"
+                        android:textColor="@color/textPrimary"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/tvGesture"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="手势: 无手势"
+                        android:textColor="@color/accent"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Sensitivity Card -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.AIAirMouse.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.1"
+                            android:text="@string/sensitivity_label"
+                            android:textColor="@color/textSecondary"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvSensitivityValue"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:gravity="end"
+                            android:text="1.0x"
+                            android:textColor="@color/neonCyan"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <SeekBar
+                        android:id="@+id/seekBarSensitivity"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:max="200"
+                        android:progress="100"
+                        android:progressTint="@color/neonCyan"
+                        android:thumbTint="@color/neonCyan" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Advanced Options -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAdvanced"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="44dp"
+                android:text="@string/advanced_options"
+                android:textColor="@color/textSecondary"
+                android:textSize="12sp"
+                app:backgroundTint="@color/surface"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/cardStroke"
+                app:strokeWidth="1dp" />
         </LinearLayout>
+    </ScrollView>
 
-    </LinearLayout>
+    <!-- ================= 底部触控板 ================= -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/touchpadCard"
+        style="@style/Widget.AIAirMouse.Card"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1.6">
 
-</ScrollView>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.aimouse.TouchpadView
+                android:id="@+id/touchpadView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_marginStart="14dp"
+                android:layout_marginTop="12dp"
+                android:letterSpacing="0.25"
+                android:text="TOUCHPAD"
+                android:textColor="#66FFFFFF"
+                android:textSize="9sp" />
+
+            <!-- 底部弧形左右键：贴合底边，扩大盲按容错面积 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:layout_gravity="bottom"
+                android:orientation="horizontal"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="6dp">
+
+                <TextView
+                    android:id="@+id/btnLeftClick"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_arc_button"
+                    android:clickable="true"
+                    android:contentDescription="鼠标左键"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:letterSpacing="0.18"
+                    android:text="左键"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnRightClick"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_arc_button"
+                    android:clickable="true"
+                    android:contentDescription="鼠标右键"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:letterSpacing="0.18"
+                    android:text="右键"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</LinearLayout>

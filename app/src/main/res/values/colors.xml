@@ -19,4 +19,12 @@
     <color name="textSecondary">#B0B0B0</color>
     <color name="buttonBg">#2A2A2A</color>
     <color name="divider">#333333</color>
+    <color name="neonCyan">#00E5FF</color>
+    <color name="cardStroke">#334A90E2</color>
+    <color name="arcButtonStart">#404A90E2</color>
+    <color name="arcButtonEnd">#144A90E2</color>
+    <color name="arcButtonStroke">#662FD9FF</color>
+    <color name="pointerTrackOn">#664A90E2</color>
+    <color name="pointerTrackOff">#33FFFFFF</color>
+    <color name="pointerThumbOff">#8A8A8A</color>
 </resources>

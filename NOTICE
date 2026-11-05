@@ -1,0 +1,16 @@
+AI Air Mouse (AIAirMouse)
+    Copyright (c) 2026 Zeyu Wang
+
+    This product includes software developed by third parties:
+
+    - Shizuku (https://github.com/RikkaApps/Shizuku-API)
+      Copyright (c) 2021 RikkaW
+      Licensed under the MIT License.
+
+    - AndroidX Libraries (https://developer.android.com/jetpack/androidx)
+      Copyright (c) The Android Open Source Project
+      Licensed under the Apache License, Version 2.0.
+
+    - Material Components for Android (https://github.com/material-components/material-components-android)
+      Copyright (c) The Android Open Source Project
+      Licensed under the Apache License, Version 2.0.

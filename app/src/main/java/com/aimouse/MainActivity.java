@@ -1,6 +1,7 @@
 package com.aimouse;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -19,13 +20,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.PowerManager;
 import android.util.Log;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.SeekBar;
-import android.widget.Switch;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,6 +33,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.Locale;
 
@@ -60,16 +62,23 @@ public class MainActivity extends AppCompatActivity
 
     // ===== UI 组件 =====
     private TouchpadView touchpadView;
-    private Switch switchPointer;
+    private SwitchMaterial switchPointer;
+    private SensorWaveView sensorWaveView;
     private TextView tvConnectionStatus;
     private TextView tvGyroRaw;
     private TextView tvGyroFiltered;
     private TextView tvAccelRaw;
     private TextView tvGesture;
     private TextView tvSensitivityValue;
+    private TextView tvPointerState;
+    private TextView btnLeftClick;
+    private TextView btnRightClick;
     private SeekBar seekBarSensitivity;
     private Button btnConnect;
+    private Button btnAdvanced;
     private View statusIndicator;
+    private View pointerIndicator;
+    private ValueAnimator pointerPulse;
 
     // ===== 传感器 =====
     private SensorManager sensorManager;
@@ -91,6 +100,7 @@ public class MainActivity extends AppCompatActivity
     // ===== 蓝牙HID服务 =====
     private MouseHIDService mouseHIDService;
     private boolean serviceBound = false;
+    private boolean serviceBinding = false;
 
     // ===== 传感器数据 =====
     private long lastSensorTimestamp = 0;
@@ -120,8 +130,12 @@ public class MainActivity extends AppCompatActivity
         loadPreferences();
         setupListeners();
         initShizukuListeners();
-        bindMouseHIDService();
         checkPermissions();
+        // Android 14 起 connectedDevice 前台服务要求已持有 BLUETOOTH_CONNECT，
+        // 因此等蓝牙权限就绪后再启动服务
+        if (hasBluetoothPermissions()) {
+            bindMouseHIDService();
+        }
     }
 
     // ===== 初始化 =====
@@ -137,7 +151,13 @@ public class MainActivity extends AppCompatActivity
         tvSensitivityValue = findViewById(R.id.tvSensitivityValue);
         seekBarSensitivity = findViewById(R.id.seekBarSensitivity);
         btnConnect = findViewById(R.id.btnConnect);
+        btnAdvanced = findViewById(R.id.btnAdvanced);
         statusIndicator = findViewById(R.id.statusIndicator);
+        sensorWaveView = findViewById(R.id.sensorWaveView);
+        tvPointerState = findViewById(R.id.tvPointerState);
+        pointerIndicator = findViewById(R.id.pointerIndicator);
+        btnLeftClick = findViewById(R.id.btnLeftClick);
+        btnRightClick = findViewById(R.id.btnRightClick);
 
         touchpadView.setTouchpadListener(this);
     }
@@ -212,6 +232,7 @@ public class MainActivity extends AppCompatActivity
 
         switchPointer.setChecked(pointerEnabled);
         touchpadView.setPointerEnabled(pointerEnabled);
+        updatePointerUI(pointerEnabled);
         seekBarSensitivity.setProgress(sensitivity);
         updateSensitivityDisplay(sensitivity);
         adaptiveSensitivity.setBaseSensitivity(sensitivity / 100.0);
@@ -221,6 +242,7 @@ public class MainActivity extends AppCompatActivity
         // 指针移动开关
         switchPointer.setOnCheckedChangeListener((buttonView, isChecked) -> {
             touchpadView.setPointerEnabled(isChecked);
+            updatePointerUI(isChecked);
             savePreference(KEY_POINTER_ENABLED, isChecked);
         });
 
@@ -240,18 +262,81 @@ public class MainActivity extends AppCompatActivity
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
-        // 连接/断开按钮
+        // 连接/断开/取消注册按钮
         btnConnect.setOnClickListener(v -> {
-            if (mouseHIDService != null) {
-                if (mouseHIDService.isConnected()) {
-                    mouseHIDService.disconnect();
-                } else {
-                    registerHIDWithCheck();
-                }
+            if (mouseHIDService == null) {
+                registerHIDWithCheck();
+                return;
+            }
+            if (mouseHIDService.isConnected()) {
+                mouseHIDService.disconnect();
+            } else if (mouseHIDService.isRegistered()) {
+                // 已注册但尚未连接 → 取消注册
+                mouseHIDService.unregisterHID();
+                updateConnectionUI(false, null);
             } else {
                 registerHIDWithCheck();
             }
         });
+
+        // 底部弧形左右键
+        btnLeftClick.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            handleMouseButton(false);
+        });
+        btnRightClick.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            handleMouseButton(true);
+        });
+
+        // 高级选项：Shizuku 授权（可选，不影响常规 HID 注册）
+        btnAdvanced.setOnClickListener(v -> showAdvancedOptionsDialog());
+    }
+
+    private void updatePointerUI(boolean enabled) {
+        if (pointerPulse != null) {
+            pointerPulse.cancel();
+            pointerPulse = null;
+        }
+        pointerIndicator.setAlpha(1f);
+        pointerIndicator.setScaleX(1f);
+        pointerIndicator.setScaleY(1f);
+        pointerIndicator.setBackgroundResource(enabled
+                ? R.drawable.pointer_indicator_on
+                : R.drawable.pointer_indicator_off);
+        tvPointerState.setText(enabled
+                ? "ON · 陀螺仪控制已开启"
+                : "OFF · 指针移动已暂停");
+        tvPointerState.setTextColor(ContextCompat.getColor(this,
+                enabled ? R.color.neonCyan : R.color.textSecondary));
+
+        if (enabled) {
+            // 呼吸灯效果，强化“已开启”的状态感
+            pointerPulse = ValueAnimator.ofFloat(0.55f, 1f);
+            pointerPulse.setDuration(1400);
+            pointerPulse.setRepeatMode(ValueAnimator.REVERSE);
+            pointerPulse.setRepeatCount(ValueAnimator.INFINITE);
+            pointerPulse.setInterpolator(new AccelerateDecelerateInterpolator());
+            pointerPulse.addUpdateListener(animation -> {
+                float value = (float) animation.getAnimatedValue();
+                pointerIndicator.setAlpha(value);
+                pointerIndicator.setScaleX(value);
+                pointerIndicator.setScaleY(value);
+            });
+            pointerPulse.start();
+        }
+    }
+
+    private void handleMouseButton(boolean right) {
+        if (mouseHIDService != null && mouseHIDService.isConnected()) {
+            if (right) {
+                mouseHIDService.clickRight();
+            } else {
+                mouseHIDService.clickLeft();
+            }
+        } else {
+            showToast("蓝牙未连接");
+        }
     }
 
     private void updateSensitivityDisplay(int progress) {
@@ -276,15 +361,8 @@ public class MainActivity extends AppCompatActivity
      * 当 Shizuku 服务启动/停止时自动处理权限授权流程。
      */
     private void initShizukuListeners() {
-        shizukuBinderReceivedListener = () -> {
-            Log.i(TAG, "Shizuku 服务已连接");
-            runOnUiThread(() -> {
-                // Shizuku 刚启动，检查是否需要授权
-                if (!ShizukuHelper.isPrivilegeGranted(this)) {
-                    ShizukuHelper.startGrantFlow(this, null);
-                }
-            });
-        };
+        shizukuBinderReceivedListener = () ->
+                Log.i(TAG, "Shizuku 服务已连接（可选，HID 注册不再依赖它）");
 
         shizukuBinderDeadListener = () -> {
             Log.i(TAG, "Shizuku 服务已断开");
@@ -293,33 +371,9 @@ public class MainActivity extends AppCompatActivity
         shizukuPermissionListener = (requestCode, grantResult) -> {
             Log.i(TAG, "Shizuku 权限请求结果: " + grantResult);
             if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                runOnUiThread(() -> {
-                    ShizukuHelper.grantPrivilegePermission(
-                            new ShizukuHelper.GrantCallback() {
-                                @Override
-                                public void onSuccess() {
-                                    runOnUiThread(() -> {
-                                        Toast.makeText(MainActivity.this,
-                                                "BLUETOOTH_PRIVILEGED 授权成功！",
-                                                Toast.LENGTH_LONG).show();
-                                    });
-                                }
-
-                                @Override
-                                public void onFailure(String reason) {
-                                    runOnUiThread(() -> {
-                                        Toast.makeText(MainActivity.this,
-                                                "授权失败: " + reason,
-                                                Toast.LENGTH_LONG).show();
-                                    });
-                                }
-
-                                @Override
-                                public void onShizukuNotAvailable() {
-                                    // 忽略
-                                }
-                            });
-                });
+                runOnUiThread(this::grantPrivilegeWithCallback);
+            } else {
+                runOnUiThread(() -> showToast("Shizuku 权限被拒绝（不影响常规 HID 使用）"));
             }
         };
 
@@ -329,19 +383,28 @@ public class MainActivity extends AppCompatActivity
         shizukuListenersRegistered = true;
     }
 
-    private void checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ 需要 BLUETOOTH_CONNECT 权限
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{
-                                Manifest.permission.BLUETOOTH_CONNECT,
-                                Manifest.permission.BLUETOOTH_SCAN,
-                                Manifest.permission.BLUETOOTH_ADVERTISE
-                        },
-                        REQUEST_BT_PERMISSIONS);
+    private void grantPrivilegeWithCallback() {
+        ShizukuHelper.grantPrivilegePermission(new ShizukuHelper.GrantCallback() {
+            @Override
+            public void onSuccess() {
+                runOnUiThread(() -> showToast("BLUETOOTH_PRIVILEGED 授权成功"));
             }
+
+            @Override
+            public void onFailure(String reason) {
+                runOnUiThread(() -> showToast("授权失败: " + reason));
+            }
+
+            @Override
+            public void onShizukuNotAvailable() {
+                runOnUiThread(() -> showToast("Shizuku 未运行"));
+            }
+        });
+    }
+
+    private void checkPermissions() {
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions();
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -351,15 +414,33 @@ public class MainActivity extends AppCompatActivity
                         REQUEST_BT_PERMISSIONS + 1);
             }
         }
+    }
 
-        // 检查 BLUETOOTH_PRIVILEGED 权限（signature级别，需通过 ADB 或 Shizuku 授权）
-        if (!ShizukuHelper.isPrivilegeGranted(this)) {
-            // 延迟检查，给 Shizuku 监听器注册留出时间
-            uiHandler.postDelayed(() -> {
-                if (!ShizukuHelper.isPrivilegeGranted(this)) {
-                    showPrivilegeRequiredDialog();
-                }
-            }, 500);
+    /**
+     * HID 注册只依赖运行时蓝牙权限（与 Bluke 的实现一致），
+     * 不再把 signature 级的 BLUETOOTH_PRIVILEGED 作为前置条件。
+     */
+    private boolean hasBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                    && ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+                    && ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private void requestBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_ADVERTISE
+                    },
+                    REQUEST_BT_PERMISSIONS);
         }
     }
 
@@ -377,6 +458,9 @@ public class MainActivity extends AppCompatActivity
             }
             if (!allGranted) {
                 showToast("蓝牙权限被拒绝，部分功能可能不可用");
+            } else {
+                // 权限授予后再启动 HID 前台服务
+                bindMouseHIDService();
             }
         }
     }
@@ -384,6 +468,10 @@ public class MainActivity extends AppCompatActivity
     // ===== 蓝牙HID服务绑定 =====
 
     private void bindMouseHIDService() {
+        if (serviceBound || serviceBinding) {
+            return;
+        }
+        serviceBinding = true;
         Intent intent = new Intent(this, MouseHIDService.class);
         // 启动前台服务
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -400,6 +488,7 @@ public class MainActivity extends AppCompatActivity
             MouseHIDService.MouseHIDBinder binder = (MouseHIDService.MouseHIDBinder) service;
             mouseHIDService = binder.getService();
             serviceBound = true;
+            serviceBinding = false;
 
             mouseHIDService.setConnectionCallback(new MouseHIDService.ConnectionCallback() {
                 @Override
@@ -419,20 +508,22 @@ public class MainActivity extends AppCompatActivity
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            if (mouseHIDService != null) {
+                mouseHIDService.setConnectionCallback(null);
+            }
             mouseHIDService = null;
             serviceBound = false;
+            serviceBinding = false;
         }
     };
 
     private void registerHIDWithCheck() {
-        if (mouseHIDService == null) {
-            showToast("蓝牙服务未就绪，请稍候…");
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions();
             return;
         }
-
-        // 检查 BLUETOOTH_PRIVILEGED 权限
-        if (!ShizukuHelper.isPrivilegeGranted(this)) {
-            showPrivilegeRequiredDialog();
+        if (mouseHIDService == null) {
+            showToast("蓝牙服务未就绪，请稍候…");
             return;
         }
 
@@ -454,19 +545,30 @@ public class MainActivity extends AppCompatActivity
             statusIndicator.setBackgroundResource(R.drawable.status_dot_connecting);
             btnConnect.setText("取消注册");
         } else {
-            showToast("HID注册失败，请检查权限是否已授予");
+            showToast("HID 注册失败：请确认设备支持蓝牙 HID Device，且蓝牙权限已授予");
         }
     }
 
     private void updateConnectionUI(boolean connected, BluetoothDevice device) {
         if (connected && device != null) {
-            tvConnectionStatus.setText(String.format("已连接: %s", device.getName()));
+            String deviceName = getSafeDeviceName(device);
+            tvConnectionStatus.setText(String.format("已连接: %s", deviceName));
             statusIndicator.setBackgroundResource(R.drawable.status_dot_connected);
             btnConnect.setText("断开连接");
         } else {
             tvConnectionStatus.setText("未连接");
             statusIndicator.setBackgroundResource(R.drawable.status_dot_disconnected);
             btnConnect.setText("注册HID设备");
+        }
+    }
+
+    private String getSafeDeviceName(BluetoothDevice device) {
+        try {
+            String name = device.getName();
+            return name != null ? name : "未知设备";
+        } catch (SecurityException e) {
+            // 蓝牙权限可能被撤销，读取设备名会抛 SecurityException
+            return "未知设备";
         }
     }
 
@@ -487,11 +589,19 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
+        if (pointerPulse != null) {
+            pointerPulse.cancel();
+            pointerPulse = null;
+        }
         unregisterSensors();
         if (serviceBound) {
+            if (mouseHIDService != null) {
+                mouseHIDService.setConnectionCallback(null);
+            }
             unbindService(serviceConnection);
             serviceBound = false;
         }
+        mouseHIDService = null;
         // 移除 Shizuku 监听器
         if (shizukuListenersRegistered) {
             Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener);
@@ -550,6 +660,11 @@ public class MainActivity extends AppCompatActivity
         lastGyroX = gyroX;
         lastGyroY = gyroY;
         lastGyroZ = gyroZ;
+
+        // 波形图：角速度幅值归一化（约 4 rad/s 视为满幅）
+        float gyroMagnitude = (float) Math.sqrt(
+                gyroX * gyroX + gyroY * gyroY + gyroZ * gyroZ);
+        sensorWaveView.pushSample(gyroMagnitude / 4.0f);
 
         long currentTime = event.timestamp;
 
@@ -624,6 +739,11 @@ public class MainActivity extends AppCompatActivity
         lastAccelY = accelY;
         lastAccelZ = accelZ;
 
+        // 波形图：相对重力的偏移量归一化（约 6 m/s² 视为满幅）
+        float accelMagnitude = (float) Math.sqrt(
+                accelX * accelX + accelY * accelY + accelZ * accelZ);
+        sensorWaveView.pushSample(Math.abs(accelMagnitude - 9.8f) / 6.0f);
+
         // 输入手势识别引擎
         gestureEngine.feedAccelData(accelX, accelY, accelZ, event.timestamp / 1000000L);
 
@@ -649,6 +769,7 @@ public class MainActivity extends AppCompatActivity
 
         // 限流UI更新
         if (event.timestamp - lastUIUpdateTime > UI_UPDATE_INTERVAL_MS * 1000000L) {
+            lastUIUpdateTime = event.timestamp;
             final float finalAccelX = accelX;
             final float finalAccelY = accelY;
             final float finalAccelZ = accelZ;
@@ -749,31 +870,48 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * 显示 BLUETOOTH_PRIVILEGED 权限缺失对话框。
-     * 优先引导用户使用 Shizuku（手机端直接授权），备选手动 ADB。
+     * 高级选项：Shizuku 授权（可选）。
+     * 常规 HID 注册只需运行时蓝牙权限；Shizuku 仅用于个别需要系统级权限的 ROM。
      */
-    private void showPrivilegeRequiredDialog() {
-        // 如果 Shizuku 可用，直接走 Shizuku 授权流程
-        if (ShizukuHelper.isShizukuAvailable()) {
-            ShizukuHelper.startGrantFlow(this, null);
-            return;
-        }
+    private void showAdvancedOptionsDialog() {
+        boolean installed = ShizukuHelper.isShizukuInstalled(this);
+        boolean available = ShizukuHelper.isShizukuAvailable();
+        boolean shizukuGranted = ShizukuHelper.hasShizukuPermission();
+        boolean privileged = ShizukuHelper.isPrivilegeGranted(this);
 
-        // Shizuku 不可用，显示对话框让用户选择
+        String message = "Shizuku 是可选的高级功能，常规蓝牙鼠标/键盘无需它。\n\n"
+                + "当前状态\n"
+                + "· Shizuku 已安装：" + (installed ? "是" : "否") + "\n"
+                + "· Shizuku 运行中：" + (available ? "是" : "否") + "\n"
+                + "· Shizuku 授权：" + (shizukuGranted ? "已授权" : "未授权") + "\n"
+                + "· BLUETOOTH_PRIVILEGED：" + (privileged ? "已授予" : "未授予") + "\n\n"
+                + "说明：只有部分 ROM 在 HID 注册失败时，才建议尝试补充系统级权限。";
+
         new AlertDialog.Builder(this)
-                .setTitle("需要高级权限")
-                .setMessage("蓝牙 HID 功能需要 BLUETOOTH_PRIVILEGED 权限。\n\n"
-                        + "推荐方式一：使用 Shizuku（无需电脑）\n"
-                        + "  1. 安装 Shizuku App\n"
-                        + "  2. 通过无线调试启动 Shizuku\n"
-                        + "  3. 回到本 App 自动完成授权\n\n"
-                        + "备选方式二：手动 ADB 授权（需电脑）\n"
-                        + "  adb shell pm grant com.aimouse \\\n"
-                        + "    android.permission.BLUETOOTH_PRIVILEGED")
-                .setPositiveButton("使用 Shizuku", (d, w) -> {
-                    ShizukuHelper.startGrantFlow(this, null);
+                .setTitle("高级选项")
+                .setMessage(message)
+                .setPositiveButton("开始 Shizuku 授权", (d, w) -> {
+                    if (!available) {
+                        // 未安装或未运行 Shizuku 时，由 ShizukuHelper 给出安装/启动引导
+                        ShizukuHelper.startGrantFlow(this, null);
+                    } else if (!ShizukuHelper.hasShizukuPermission()) {
+                        try {
+                            Shizuku.requestPermission(0);
+                        } catch (Exception e) {
+                            showToast("Shizuku 请求失败: " + e.getMessage());
+                        }
+                    } else {
+                        grantPrivilegeWithCallback();
+                    }
                 })
-                .setNegativeButton("稍后", null)
+                .setNeutralButton("ADB 命令", (d, w) -> new AlertDialog.Builder(this)
+                        .setTitle("手动 ADB 授权（可选）")
+                        .setMessage("adb shell pm grant com.aimouse "
+                                + "android.permission.BLUETOOTH_PRIVILEGED\n\n"
+                                + "多数设备无需执行此步骤。")
+                        .setPositiveButton("确定", null)
+                        .show())
+                .setNegativeButton("关闭", null)
                 .show();
     }
 }

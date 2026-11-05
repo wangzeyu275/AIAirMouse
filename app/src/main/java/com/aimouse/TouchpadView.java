@@ -3,10 +3,8 @@ package com.aimouse;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -43,6 +41,9 @@ public class TouchpadView extends View {
     private long touchDownTime;
     private boolean isLongPressTriggered;
     private boolean isDragging; // 是否正在拖拽（长按后移动）
+    private boolean hasMoved;   // 本次触摸是否发生过滑动（滑动后不再触发点击）
+    private boolean twoFingerGesture; // 本次触摸序列是否包含双指操作
+    private final float moveSlopPx;   // 滑动判定阈值（12dp，参考 Bluke 的 TAP_SLOP_DP）
     private static final long LONG_PRESS_DURATION_MS = 500;
 
     // 双指状态
@@ -59,9 +60,9 @@ public class TouchpadView extends View {
     private final Handler longPressHandler;
     private final Runnable longPressRunnable;
 
-    // 触控板占比
-    private static final float TOUCHPAD_WIDTH_RATIO = 0.80f;  // 占据屏幕宽度的80%
-    private static final float TOUCHPAD_HEIGHT_RATIO = 0.50f; // 占据屏幕高度的50%
+    // 触控板绘制区域：铺满自身，仅保留内边距
+    private static final float TOUCHPAD_INSET_DP = 6f;
+    private static final float TOUCHPAD_CORNER_RADIUS_DP = 18f;
 
     public TouchpadView(Context context) {
         this(context, null);
@@ -69,6 +70,8 @@ public class TouchpadView extends View {
 
     public TouchpadView(Context context, AttributeSet attrs) {
         super(context, attrs);
+
+        moveSlopPx = 12f * getResources().getDisplayMetrics().density;
 
         // 填充画笔
         fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -136,15 +139,20 @@ public class TouchpadView extends View {
         int width = getWidth();
         int height = getHeight();
 
-        // 计算触控板区域（居中，80%宽度 × 50%高度）
-        float padWidth = width * TOUCHPAD_WIDTH_RATIO;
-        float padHeight = height * TOUCHPAD_HEIGHT_RATIO;
-        float padLeft = (width - padWidth) / 2f;
-        float padTop = (height - padHeight) / 2f;
+        // 触控板区域铺满 View，仅保留少量内边距，避免卡片内出现大片空白
+        float density = getResources().getDisplayMetrics().density;
+        float inset = TOUCHPAD_INSET_DP * density;
+        float padLeft = inset;
+        float padTop = inset;
+        float padWidth = width - inset * 2f;
+        float padHeight = height - inset * 2f;
+        if (padWidth <= 0f || padHeight <= 0f) {
+            return;
+        }
 
         touchpadRect.set(padLeft, padTop, padLeft + padWidth, padTop + padHeight);
 
-        float cornerRadius = 16f;
+        float cornerRadius = TOUCHPAD_CORNER_RADIUS_DP * density;
 
         // 发光效果（外扩）
         float glowPadding = 6f;
@@ -171,15 +179,6 @@ public class TouchpadView extends View {
 
         canvas.drawLine(cx, padTop + 20, cx, padTop + padHeight - 20, crossPaint);
         canvas.drawLine(padLeft + 20, cy, padLeft + padWidth - 20, cy, crossPaint);
-
-        // 绘制状态文字
-        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        textPaint.setColor(Color.parseColor("#664A90E2"));
-        textPaint.setTextSize(28f);
-        textPaint.setTextAlign(Paint.Align.CENTER);
-
-        String statusText = isPointerEnabled ? "指针移动: 开" : "指针移动: 关 (仅点击/滚轮)";
-        canvas.drawText(statusText, cx, padTop - 12f, textPaint);
     }
 
     @Override
@@ -238,6 +237,8 @@ public class TouchpadView extends View {
                 touchDownTime = System.currentTimeMillis();
                 isLongPressTriggered = false;
                 isDragging = false;
+                hasMoved = false;
+                twoFingerGesture = false;
 
                 // 启动长按检测
                 longPressHandler.removeCallbacks(longPressRunnable);
@@ -256,15 +257,14 @@ public class TouchpadView extends View {
                     lastY = y;
                 } else if (!isLongPressTriggered) {
                     // 正常滑动模式
+                    float dx = x - lastX;
+                    float dy = y - lastY;
                     if (isPointerEnabled && listener != null) {
-                        float dx = x - lastX;
-                        float dy = y - lastY;
                         listener.onPointerMove(dx, dy);
                     }
-                    // 如果移动距离超过阈值，取消长按检测
-                    float totalDx = x - lastX;
-                    float totalDy = y - lastY;
-                    if (Math.abs(totalDx) > 5 || Math.abs(totalDy) > 5) {
+                    // 如果移动距离超过阈值，取消长按检测，并标记为滑动（不再触发点击）
+                    if (Math.abs(dx) > moveSlopPx || Math.abs(dy) > moveSlopPx) {
+                        hasMoved = true;
                         longPressHandler.removeCallbacks(longPressRunnable);
                     }
                     lastX = x;
@@ -283,8 +283,9 @@ public class TouchpadView extends View {
                         listener.onLeftButtonUp();
                     }
                     isDragging = false;
-                } else if (!isLongPressTriggered && duration < LONG_PRESS_DURATION_MS) {
-                    // 短按 → 单击
+                } else if (!isLongPressTriggered && !hasMoved && !twoFingerGesture
+                        && duration < LONG_PRESS_DURATION_MS) {
+                    // 未移动的短按 → 单击
                     if (listener != null) {
                         listener.onLeftButtonClick();
                     }
@@ -295,6 +296,7 @@ public class TouchpadView extends View {
                     }
                 }
 
+                twoFingerGesture = false;
                 resetTouchState();
                 return true;
 
@@ -319,10 +321,15 @@ public class TouchpadView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_POINTER_DOWN:
                 if (event.getPointerCount() == 2) {
+                    longPressHandler.removeCallbacks(longPressRunnable);
+                    // 若单指已在拖拽，切换双指前先释放左键，避免按键一直卡住
+                    if (isDragging && listener != null) {
+                        listener.onLeftButtonUp();
+                    }
                     isTwoFinger = true;
+                    twoFingerGesture = true;
                     isLongPressTriggered = false;
                     isDragging = false;
-                    longPressHandler.removeCallbacks(longPressRunnable);
 
                     // 使用两个手指的平均位置
                     float avgY = (event.getY(0) + event.getY(1)) / 2f;
@@ -380,6 +387,18 @@ public class TouchpadView extends View {
         return false;
     }
 
+    @Override
+    protected void onDetachedFromWindow() {
+        // View 销毁时取消长按回调，避免回调持有已销毁的 View
+        longPressHandler.removeCallbacks(longPressRunnable);
+        if (isDragging && listener != null) {
+            listener.onLeftButtonUp();
+        }
+        isDragging = false;
+        isLongPressTriggered = false;
+        super.onDetachedFromWindow();
+    }
+
     /**
      * 重置触摸状态，防止状态残留导致异常。
      */
@@ -393,6 +412,7 @@ public class TouchpadView extends View {
         }
         isDragging = false;
         isTwoFinger = false;
+        hasMoved = false;
     }
 
     /**

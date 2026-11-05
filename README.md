@@ -9,7 +9,7 @@
 1. [核心特性](#核心特性)
 2. [项目结构](#项目结构)
 3. [编译与安装](#编译与安装)
-4. [ADB 权限授权（关键步骤）](#adb-权限授权关键步骤)
+4. [权限说明（Shizuku 可选）](#权限说明shizuku-可选)
 5. [蓝牙配对操作指南](#蓝牙配对操作指南)
 6. [触控板操作说明](#触控板操作说明)
 7. [USB ADB 方案](#usb-adb-方案)
@@ -40,8 +40,10 @@ AIAirMouse/
 ├── build.gradle                    # 项目级构建配置
 ├── settings.gradle                 # 项目设置
 ├── gradle.properties               # Gradle 属性
+├── gradlew / gradlew.bat           # Gradle Wrapper 启动脚本
 ├── gradle/wrapper/
-│   └── gradle-wrapper.properties   # Gradle Wrapper 配置
+│   ├── gradle-wrapper.jar          # Wrapper JAR
+│   └── gradle-wrapper.properties    # Gradle Wrapper 配置
 ├── app/
 │   ├── build.gradle                # 模块级构建配置
 │   ├── proguard-rules.pro          # 混淆规则
@@ -53,8 +55,8 @@ AIAirMouse/
 │       │   ├── TouchpadView.java           # 虚拟触控板自定义View
 │       │   ├── KalmanFilter.java           # 卡尔曼滤波器
 │       │   ├── GestureRecognitionEngine.java # 手势识别引擎
-│       │   └── AdaptiveSensitivity.java    # 自适应灵敏度
-│       │   └── ShizukuHelper.java           # Shizuku 权限辅助（手机端一键授权）
+│       │   ├── AdaptiveSensitivity.java    # 自适应灵敏度
+│       │   └── ShizukuHelper.java           # Shizuku 权限辅助（可选高级选项）
 │       └── res/
 │           ├── layout/activity_main.xml    # 主界面布局
 │           ├── values/strings.xml          # 字符串资源
@@ -66,6 +68,8 @@ AIAirMouse/
 │   ├── usb_adb_mouse.bat           # USB ADB 方案 Windows 脚本
 │   ├── usb_adb_mouse.sh            # USB ADB 方案 macOS/Linux 脚本
 │   └── usb_hid_gadget.c            # USB HID Gadget 方案 C 代码
+├── LICENSE                         # Apache License 2.0
+├── NOTICE                          # 第三方依赖许可声明
 └── README.md                       # 本文档
 ```
 
@@ -116,50 +120,35 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## 权限授权（关键步骤）
+## 权限说明（Shizuku 可选）
 
-> **重要：** 蓝牙 HID 方案需要 `android.permission.BLUETOOTH_PRIVILEGED` 权限，该权限是 `signature` 级别，普通安装无法自动获得。
+> **常规使用不需要 `BLUETOOTH_PRIVILEGED`。** App 注册蓝牙 HID 只依赖运行时蓝牙权限：
+> - Android 12+：`BLUETOOTH_CONNECT`、`BLUETOOTH_SCAN`、`BLUETOOTH_ADVERTISE`
+> - Android 9–11：`BLUETOOTH`、`BLUETOOTH_ADMIN`
 
-### 推荐方式：Shizuku（手机端一键授权，无需电脑）
+首次启动时按系统弹窗允许“附近的设备”权限即可。`BLUETOOTH_PRIVILEGED` 属于 `signature` 级权限，普通安装通常无法获得，因此**不再作为首次启动的强制步骤，也不会在启动时弹窗索取**。
 
-**Shizuku** 是一个开源工具，让普通 App 可以调用系统级 API。通过 Shizuku 可以直接在手机上完成授权，**无需连接电脑、无需 Root**。
+### 可选高级选项：Shizuku
 
-#### 步骤一：安装 Shizuku
+个别 ROM 在 HID 注册时报权限错误时，可尝试 App 底部的 **高级选项（Shizuku，可选）**：
 
-1. 从 [Google Play](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api) 或 [官网](https://shizuku.rikka.app/download/) 下载 Shizuku App
-2. 安装到手机
+1. 从 [Google Play](https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api) 或 [官网](https://shizuku.rikka.app/download/) 安装 Shizuku
+2. 按 Shizuku 引导启动服务（Android 11+ 可通过无线调试启动）
+3. 打开 App → 高级选项，查看 Shizuku 安装/运行/授权及 `BLUETOOTH_PRIVILEGED` 状态
+4. 点击“开始 Shizuku 授权”；未安装或未运行时会给出对应引导
 
-#### 步骤二：启动 Shizuku（Android 11+）
+> 说明：`pm grant ... BLUETOOTH_PRIVILEGED` 在多数设备上会被系统拒绝（签名级权限），该入口仅用于排查，失败不影响常规蓝牙 HID 使用。
 
-1. 打开手机 **设置 → 开发者选项 → 无线调试**
-2. 开启 **无线调试**
-3. 打开 Shizuku App，点击 **配对**
-4. 在无线调试菜单中选择 **使用配对码配对设备**
-5. 输入 Shizuku 显示的配对码
-6. 配对成功后，返回 Shizuku 点击 **启动**
-
-#### 步骤三：授权本 App
-
-1. 打开 AI空中鼠标 App
-2. App 会自动检测到 Shizuku 并引导授权
-3. 在 Shizuku 弹窗中点击 **允许**
-4. 授权完成，即可正常使用蓝牙 HID 功能
-
-### 备选方式：手动 ADB 授权（需电脑）
+### 备选：手动 ADB（可选）
 
 ```bash
 adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
 ```
 
-**验证授权是否成功：**
+**验证：**
 ```bash
 adb shell dumpsys package com.aimouse | grep BLUETOOTH_PRIVILEGED
 ```
-如果看到 `granted=true` 则表示授权成功。
-
-**如果没有授权：**
-- App 会在启动时弹窗提示，引导使用 Shizuku 或手动 ADB 授权
-- 触控板和传感器功能仍可正常使用，但无法通过蓝牙控制电脑
 
 ---
 
@@ -394,7 +383,15 @@ gain = 1.2 / (1 + e^(-speed / 100))
 
 ### HID 报告描述符
 
-[MouseHIDService.java](app/src/main/java/com/aimouse/MouseHIDService.java) 定义了标准 5 字节 HID 鼠标报告：
+[MouseHIDService.java](app/src/main/java/com/aimouse/MouseHIDService.java) 通过一个 HID 设备注册三个报告：
+
+| Report ID | 类型 | 载荷长度 | 内容 |
+|-----------|------|----------|------|
+| 0x01 | 鼠标 | 5 字节 | 按钮位、X、Y、垂直滚轮、水平滚轮 |
+| 0x02 | 键盘 | 8 字节 | 修饰键、保留位、6 个键位 |
+| 0x03 | Consumer | 2 字节 | 16-bit usage（音量/媒体键等） |
+
+鼠标报告载荷：
 
 | 字节 | 内容 |
 |------|------|
@@ -404,22 +401,24 @@ gain = 1.2 / (1 + e^(-speed / 100))
 | Byte 3 | 垂直滚轮 (-127 ~ 127) |
 | Byte 4 | 水平滚轮/AC Pan (-127 ~ 127) |
 
+> 发送时调用 `sendReport(device, reportId, payload)`：`reportId` 单独传入，`payload` **不包含** Report ID 字节。
+
 ---
 
 ## 常见问题排查
 
-### Q1: App 闪退 / 蓝牙 HID 注册失败
+### Q1: 蓝牙 HID 注册失败
 
-**错误信息：** `SecurityException: Permission denied: BLUETOOTH_PRIVILEGED`
+**常见原因：**
+- 未授予蓝牙权限（Android 12+ 需要“附近的设备”权限）
+- 设备 ROM 不支持 Bluetooth HID Device Profile
+- 系统安全策略拦截了 HID 注册
 
-**解决方案（推荐）：** 使用 Shizuku 在手机端一键授权
-1. 安装并启动 Shizuku App（通过无线调试）
-2. 打开 AI空中鼠标，App 会自动引导授权流程
-
-**备选方案：** 手动执行 ADB 授权命令：
-```bash
-adb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED
-```
+**处理顺序：**
+1. 确认已允许蓝牙权限后，重新点击“注册HID设备”
+2. 关闭再开启手机蓝牙，或重启手机
+3. 确认设备支持蓝牙 HID Device（部分定制 ROM 会阉割该 Profile）
+4. 仍然失败时，再尝试底部“高级选项（Shizuku，可选）”，该步骤不是必需
 
 ### Q2: 电脑搜索不到 "AI Air Mouse" 蓝牙设备
 
@@ -472,11 +471,12 @@ adb devices
 ### Q8: 如何卸载 App
 
 ```bash
-# 先撤销权限（可选）
-adb shell pm revoke com.aimouse android.permission.BLUETOOTH_PRIVILEGED
-
-# 卸载
 adb uninstall com.aimouse
+```
+
+如果之前手动授予过 `BLUETOOTH_PRIVILEGED`，可在卸载前撤销（可选）：
+```bash
+adb shell pm revoke com.aimouse android.permission.BLUETOOTH_PRIVILEGED
 ```
 
 ---
@@ -486,11 +486,15 @@ adb uninstall com.aimouse
 - **最低 SDK 版本：** 28 (Android 9.0)
 - **目标 SDK 版本：** 34 (Android 14)
 - **编译 SDK 版本：** 34
-- **零第三方依赖：** 蓝牙方案仅使用 Android 官方 SDK
+- **第三方依赖：** AndroidX AppCompat/Core；Shizuku API 仅用于可选高级选项
 - **语言：** Java 8
 
 ---
 
 ## 许可证
 
-本项目仅供学习和研究使用。
+本项目基于 [Apache License 2.0](LICENSE) 开源，可自由使用、修改、商用和分发（需保留版权与许可声明）。欢迎提交 Issue 和 Pull Request。
+
+Copyright (c) 2026 Zeyu Wang
+
+本项目中使用的第三方库及其许可证详见 [NOTICE](NOTICE) 文件。

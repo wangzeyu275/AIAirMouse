@@ -27,4 +27,5 @@
     <string name="bt_privilege_required">需要BLUETOOTH_PRIVILEGED权限\n请通过ADB执行:\nadb shell pm grant com.aimouse android.permission.BLUETOOTH_PRIVILEGED</string>
     <string name="bt_not_supported">此设备不支持蓝牙HID</string>
     <string name="touchpad_hint">虚拟触控板区域</string>
+    <string name="advanced_options">高级选项（Shizuku，可选）</string>
 </resources>
