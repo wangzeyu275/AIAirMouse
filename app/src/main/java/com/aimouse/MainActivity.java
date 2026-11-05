@@ -24,7 +24,7 @@ import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.widget.Button;
-import android.widget.SeekBar;
+import android.widget.ImageButton;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -56,9 +56,11 @@ public class MainActivity extends AppCompatActivity
         implements SensorEventListener, TouchpadView.TouchpadListener {
 
     private static final String TAG = "MainActivity";
-    private static final String PREFS_NAME = "aimouse_prefs";
-    private static final String KEY_POINTER_ENABLED = "pointer_enabled";
-    private static final String KEY_SENSITIVITY = "sensitivity";
+    static final String PREFS_NAME = "aimouse_prefs";
+    static final String KEY_POINTER_ENABLED = "pointer_enabled";
+    static final String KEY_SENSITIVITY = "sensitivity";
+    static final String KEY_SHOW_WAVEFORM = "show_waveform";
+    static final String KEY_GESTURE_ENABLED = "gesture_enabled";
 
     // ===== UI 组件 =====
     private TouchpadView touchpadView;
@@ -69,13 +71,12 @@ public class MainActivity extends AppCompatActivity
     private TextView tvGyroFiltered;
     private TextView tvAccelRaw;
     private TextView tvGesture;
-    private TextView tvSensitivityValue;
     private TextView tvPointerState;
     private TextView btnLeftClick;
     private TextView btnRightClick;
-    private SeekBar seekBarSensitivity;
     private Button btnConnect;
     private Button btnAdvanced;
+    private ImageButton btnSettings;
     private View statusIndicator;
     private View pointerIndicator;
     private ValueAnimator pointerPulse;
@@ -96,6 +97,10 @@ public class MainActivity extends AppCompatActivity
 
     // ===== 手势识别引擎 =====
     private final GestureRecognitionEngine gestureEngine = new GestureRecognitionEngine();
+    private boolean gestureEnabled = true;
+
+    // ===== 显示设置 =====
+    private boolean showWaveform = false;
 
     // ===== 蓝牙HID服务 =====
     private MouseHIDService mouseHIDService;
@@ -148,10 +153,9 @@ public class MainActivity extends AppCompatActivity
         tvGyroFiltered = findViewById(R.id.tvGyroFiltered);
         tvAccelRaw = findViewById(R.id.tvAccelRaw);
         tvGesture = findViewById(R.id.tvGesture);
-        tvSensitivityValue = findViewById(R.id.tvSensitivityValue);
-        seekBarSensitivity = findViewById(R.id.seekBarSensitivity);
         btnConnect = findViewById(R.id.btnConnect);
         btnAdvanced = findViewById(R.id.btnAdvanced);
+        btnSettings = findViewById(R.id.btnSettings);
         statusIndicator = findViewById(R.id.statusIndicator);
         sensorWaveView = findViewById(R.id.sensorWaveView);
         tvPointerState = findViewById(R.id.tvPointerState);
@@ -228,14 +232,33 @@ public class MainActivity extends AppCompatActivity
     private void loadPreferences() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         boolean pointerEnabled = prefs.getBoolean(KEY_POINTER_ENABLED, true);
-        int sensitivity = prefs.getInt(KEY_SENSITIVITY, 100);
 
         switchPointer.setChecked(pointerEnabled);
         touchpadView.setPointerEnabled(pointerEnabled);
         updatePointerUI(pointerEnabled);
-        seekBarSensitivity.setProgress(sensitivity);
-        updateSensitivityDisplay(sensitivity);
+        applySettings();
+    }
+
+    /**
+     * 读取设置页保存的参数并在主界面生效。
+     * 设置页返回后 onResume 会再次调用，确保改动即时可见。
+     */
+    private void applySettings() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        int sensitivity = prefs.getInt(KEY_SENSITIVITY, 100);
         adaptiveSensitivity.setBaseSensitivity(sensitivity / 100.0);
+
+        showWaveform = prefs.getBoolean(KEY_SHOW_WAVEFORM, false);
+        sensorWaveView.setVisibility(showWaveform ? View.VISIBLE : View.GONE);
+
+        gestureEnabled = prefs.getBoolean(KEY_GESTURE_ENABLED, true);
+        if (!gestureEnabled) {
+            gestureEngine.reset();
+            tvGesture.setText(R.string.gesture_disabled);
+        } else {
+            tvGesture.setText("手势: 无手势");
+        }
     }
 
     private void setupListeners() {
@@ -246,21 +269,9 @@ public class MainActivity extends AppCompatActivity
             savePreference(KEY_POINTER_ENABLED, isChecked);
         });
 
-        // 灵敏度滑块
-        seekBarSensitivity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) {
-                    updateSensitivityDisplay(progress);
-                    adaptiveSensitivity.setBaseSensitivity(progress / 100.0);
-                    savePreference(KEY_SENSITIVITY, progress);
-                }
-            }
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {}
-        });
+        // 设置入口
+        btnSettings.setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
 
         // 连接/断开/取消注册按钮
         btnConnect.setOnClickListener(v -> {
@@ -339,19 +350,9 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    private void updateSensitivityDisplay(int progress) {
-        double value = progress / 100.0;
-        tvSensitivityValue.setText(String.format(Locale.US, "%.1fx", value));
-    }
-
     private void savePreference(String key, boolean value) {
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .edit().putBoolean(key, value).apply();
-    }
-
-    private void savePreference(String key, int value) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .edit().putInt(key, value).apply();
     }
 
     // ===== 权限检查 =====
@@ -578,6 +579,10 @@ public class MainActivity extends AppCompatActivity
     protected void onResume() {
         super.onResume();
         registerSensors();
+        // 从设置页返回时同步最新配置
+        if (sensorWaveView != null) {
+            applySettings();
+        }
     }
 
     @Override
@@ -662,9 +667,11 @@ public class MainActivity extends AppCompatActivity
         lastGyroZ = gyroZ;
 
         // 波形图：角速度幅值归一化（约 4 rad/s 视为满幅）
-        float gyroMagnitude = (float) Math.sqrt(
-                gyroX * gyroX + gyroY * gyroY + gyroZ * gyroZ);
-        sensorWaveView.pushSample(gyroMagnitude / 4.0f);
+        if (showWaveform) {
+            float gyroMagnitude = (float) Math.sqrt(
+                    gyroX * gyroX + gyroY * gyroY + gyroZ * gyroZ);
+            sensorWaveView.pushSample(gyroMagnitude / 4.0f);
+        }
 
         long currentTime = event.timestamp;
 
@@ -677,8 +684,9 @@ public class MainActivity extends AppCompatActivity
 
             // 将角速度积分得到角度变化，乘以灵敏度系数得到像素位移
             // 偏航(Yaw) → X轴鼠标移动，俯仰(Pitch) → Y轴鼠标移动
-            float rawDisplacementX = gyroZ * dt * 1000f; // 缩放因子
-            float rawDisplacementY = gyroX * dt * 1000f;
+            // 手机移动方向与光标方向相反，X/Y 位移取反修正
+            float rawDisplacementX = -gyroZ * dt * 1000f; // 缩放因子
+            float rawDisplacementY = -gyroX * dt * 1000f;
 
             // 卡尔曼滤波平滑
             double filteredX = kalmanX.update(rawDisplacementX);
@@ -740,12 +748,16 @@ public class MainActivity extends AppCompatActivity
         lastAccelZ = accelZ;
 
         // 波形图：相对重力的偏移量归一化（约 6 m/s² 视为满幅）
-        float accelMagnitude = (float) Math.sqrt(
-                accelX * accelX + accelY * accelY + accelZ * accelZ);
-        sensorWaveView.pushSample(Math.abs(accelMagnitude - 9.8f) / 6.0f);
+        if (showWaveform) {
+            float accelMagnitude = (float) Math.sqrt(
+                    accelX * accelX + accelY * accelY + accelZ * accelZ);
+            sensorWaveView.pushSample(Math.abs(accelMagnitude - 9.8f) / 6.0f);
+        }
 
-        // 输入手势识别引擎
-        gestureEngine.feedAccelData(accelX, accelY, accelZ, event.timestamp / 1000000L);
+        // 输入手势识别引擎（关闭时彻底跳过，避免误触发快捷键）
+        if (gestureEnabled) {
+            gestureEngine.feedAccelData(accelX, accelY, accelZ, event.timestamp / 1000000L);
+        }
 
         // 陀螺仪不可用时的降级模式：使用加速度计倾斜角度控制鼠标
         if (!gyroAvailable && mouseHIDService != null && mouseHIDService.isConnected()
@@ -755,8 +767,8 @@ public class MainActivity extends AppCompatActivity
             float tiltX = (float) Math.atan2(accelX, Math.sqrt(accelY * accelY + accelZ * accelZ));
             float tiltY = (float) Math.atan2(accelY, Math.sqrt(accelX * accelX + accelZ * accelZ));
 
-            double filteredX = kalmanX.update(tiltX * 20);
-            double filteredY = kalmanY.update(tiltY * 20);
+            double filteredX = kalmanX.update(-tiltX * 20);
+            double filteredY = kalmanY.update(-tiltY * 20);
 
             double gain = adaptiveSensitivity.updateAndGetGain(10);
             int dx = (int) Math.round(filteredX * gain);
