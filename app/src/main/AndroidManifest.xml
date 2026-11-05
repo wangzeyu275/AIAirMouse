@@ -56,6 +56,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Settings Activity -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- Bluetooth HID Device Service -->
         <service
             android:name=".MouseHIDService"

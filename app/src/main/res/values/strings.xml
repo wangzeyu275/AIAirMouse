@@ -28,4 +28,10 @@
     <string name="bt_not_supported">此设备不支持蓝牙HID</string>
     <string name="touchpad_hint">虚拟触控板区域</string>
     <string name="advanced_options">高级选项（Shizuku，可选）</string>
+    <string name="settings_title">设置</string>
+    <string name="settings_show_waveform">显示波形图</string>
+    <string name="settings_show_waveform_desc">隐藏后把空间让给触控板</string>
+    <string name="settings_gesture">启用手势控制</string>
+    <string name="settings_gesture_desc">关闭后可彻底避免甩动/画圈被误识别为快捷键</string>
+    <string name="gesture_disabled">手势控制已关闭</string>
 </resources>

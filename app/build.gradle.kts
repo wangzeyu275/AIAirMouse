@@ -1,0 +1,44 @@
+plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "com.aimouse"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.aimouse"
+        minSdk = 28
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // AppCompat / Core — MainActivity 使用 AppCompatActivity 及兼容库
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    // Material Design 3 — 卡片、按钮与开关样式
+    implementation("com.google.android.material:material:1.11.0")
+
+    // Shizuku — 无需 Root，通过无线调试获取 ADB 级权限
+    // 用于在手机端直接授权 BLUETOOTH_PRIVILEGED，无需连接电脑
+    val shizukuVersion = "13.1.5"
+    implementation("dev.rikka.shizuku:api:$shizukuVersion")
+    implementation("dev.rikka.shizuku:provider:$shizukuVersion")
+}
