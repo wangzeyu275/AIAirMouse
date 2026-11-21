@@ -48,6 +48,7 @@ import rikka.shizuku.Shizuku;
  *   - 指针移动开关（SharedPreferences 持久化）
  *   - 蓝牙HID连接管理
  *   - 陀螺仪+加速度计传感器数据采集与卡尔曼滤波
+ *   - Mahony 四元数姿态融合 + 动态零偏校准
  *   - 自适应动态灵敏度
  *   - 手势识别引擎
  *   - 前台服务保活
@@ -91,6 +92,9 @@ public class MainActivity extends AppCompatActivity
     // ===== 卡尔曼滤波器（X轴和Y轴各一个） =====
     private final KalmanFilter kalmanX = new KalmanFilter(0.01, 0.1);
     private final KalmanFilter kalmanY = new KalmanFilter(0.01, 0.1);
+
+    // ===== Mahony 姿态融合 + 动态零偏校准 =====
+    private final SensorFusion sensorFusion = new SensorFusion();
 
     // ===== 自适应灵敏度 =====
     private final AdaptiveSensitivity adaptiveSensitivity = new AdaptiveSensitivity();
@@ -620,6 +624,9 @@ public class MainActivity extends AppCompatActivity
     private void registerSensors() {
         if (sensorManager == null) return;
 
+        // 重新注册后时间戳会跳变，重置融合器的计时（保留已学习的零偏）
+        sensorFusion.resetTimestamp();
+
         if (gyroAvailable) {
             sensorManager.registerListener(this, gyroSensor,
                     SensorManager.SENSOR_DELAY_GAME); // 50Hz (20ms)
@@ -675,6 +682,9 @@ public class MainActivity extends AppCompatActivity
 
         long currentTime = event.timestamp;
 
+        // 推进 Mahony 姿态融合与动态零偏校准（每帧都要输入）
+        sensorFusion.updateGyro(gyroX, gyroY, gyroZ, currentTime);
+
         if (lastSensorTimestamp != 0) {
             float dt = (currentTime - lastSensorTimestamp) * NS2S;
 
@@ -682,11 +692,13 @@ public class MainActivity extends AppCompatActivity
             if (dt > 0.5f) dt = 0.02f; // 默认50Hz
             if (dt <= 0) dt = 0.02f;
 
-            // 将角速度积分得到角度变化，乘以灵敏度系数得到像素位移
-            // 偏航(Yaw) → X轴鼠标移动，俯仰(Pitch) → Y轴鼠标移动
+            // 使用融合后的世界坐标系角速度做光标映射：
+            // 绕世界竖直轴 → 水平位移，绕世界左右轴 → 垂直位移
             // 手机移动方向与光标方向相反，X/Y 位移取反修正
-            float rawDisplacementX = -gyroZ * dt * 1000f; // 缩放因子
-            float rawDisplacementY = -gyroX * dt * 1000f;
+            double worldRateZ = sensorFusion.getWorldRateZ();
+            double worldRateX = sensorFusion.getWorldRateX();
+            float rawDisplacementX = (float) (-worldRateZ * dt * 1000f); // 缩放因子
+            float rawDisplacementY = (float) (-worldRateX * dt * 1000f);
 
             // 卡尔曼滤波平滑
             double filteredX = kalmanX.update(rawDisplacementX);
@@ -717,15 +729,22 @@ public class MainActivity extends AppCompatActivity
                 final float finalGyroX = gyroX;
                 final float finalGyroY = gyroY;
                 final float finalGyroZ = gyroZ;
-                final double finalFilteredX = filteredX;
-                final double finalFilteredY = filteredY;
+                final double finalWorldX = worldRateX;
+                final double finalWorldZ = worldRateZ;
+                final double finalBiasX = sensorFusion.getBiasX();
+                final double finalBiasY = sensorFusion.getBiasY();
+                final double finalBiasZ = sensorFusion.getBiasZ();
+                final boolean calibrated = sensorFusion.isBiasCalibrated();
                 runOnUiThread(() -> {
                     tvGyroRaw.setText(String.format(Locale.US,
                             "原始: X=%.3f Y=%.3f Z=%.3f rad/s",
                             finalGyroX, finalGyroY, finalGyroZ));
                     tvGyroFiltered.setText(String.format(Locale.US,
-                            "滤波后: X=%.2f Y=%.2f (增益: %.2fx)",
-                            finalFilteredX, finalFilteredY, gain));
+                            "Mahony: 水平=%+.1f°/s 垂直=%+.1f°/s 增益=%.2fx\n"
+                                    + "零偏: X%+.3f Y%+.3f Z%+.3f rad/s %s",
+                            Math.toDegrees(finalWorldZ), Math.toDegrees(finalWorldX), gain,
+                            finalBiasX, finalBiasY, finalBiasZ,
+                            calibrated ? "[已校准]" : "[校准中]"));
                 });
             }
         }
@@ -746,6 +765,9 @@ public class MainActivity extends AppCompatActivity
         lastAccelX = accelX;
         lastAccelY = accelY;
         lastAccelZ = accelZ;
+
+        // 输入姿态融合器：提供重力方向用于 Mahony 纠偏与零偏校准
+        sensorFusion.updateAccel(accelX, accelY, accelZ, event.timestamp);
 
         // 波形图：相对重力的偏移量归一化（约 6 m/s² 视为满幅）
         if (showWaveform) {
