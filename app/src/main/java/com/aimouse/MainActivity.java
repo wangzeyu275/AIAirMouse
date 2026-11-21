@@ -101,7 +101,7 @@ public class MainActivity extends AppCompatActivity
 
     // ===== 手势识别引擎 =====
     private final GestureRecognitionEngine gestureEngine = new GestureRecognitionEngine();
-    private boolean gestureEnabled = true;
+    private boolean gestureEnabled = false;
 
     // ===== 显示设置 =====
     private boolean showWaveform = false;
@@ -256,7 +256,7 @@ public class MainActivity extends AppCompatActivity
         showWaveform = prefs.getBoolean(KEY_SHOW_WAVEFORM, false);
         sensorWaveView.setVisibility(showWaveform ? View.VISIBLE : View.GONE);
 
-        gestureEnabled = prefs.getBoolean(KEY_GESTURE_ENABLED, true);
+        gestureEnabled = prefs.getBoolean(KEY_GESTURE_ENABLED, false);
         if (!gestureEnabled) {
             gestureEngine.reset();
             tvGesture.setText(R.string.gesture_disabled);

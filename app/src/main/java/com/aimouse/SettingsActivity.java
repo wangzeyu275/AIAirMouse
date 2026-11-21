@@ -36,7 +36,7 @@ public class SettingsActivity extends AppCompatActivity {
         seekBarSensitivity.setProgress(sensitivity);
         tvSensitivityValue.setText(String.format(Locale.US, "%.1fx", sensitivity / 100.0));
         switchWaveform.setChecked(prefs.getBoolean(MainActivity.KEY_SHOW_WAVEFORM, false));
-        switchGesture.setChecked(prefs.getBoolean(MainActivity.KEY_GESTURE_ENABLED, true));
+        switchGesture.setChecked(prefs.getBoolean(MainActivity.KEY_GESTURE_ENABLED, false));
 
         btnBack.setOnClickListener(v -> finish());
 
